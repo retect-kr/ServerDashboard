@@ -42,6 +42,7 @@ public class DashboardPlugin extends JavaPlugin implements Listener {
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
+        migrateConfig();
 
         logManager = new LogManager();
 
@@ -110,6 +111,52 @@ public class DashboardPlugin extends JavaPlugin implements Listener {
             announcementManager.saveAll();
         }
         getLogger().info("ServerDashboard plugin disabled.");
+    }
+
+    private void migrateConfig() {
+        boolean dirty = false;
+
+        // v1.9.0: database 섹션
+        if (!getConfig().isSet("database.type")) {
+            getConfig().set("database.type",     "sqlite");
+            getConfig().set("database.host",     "localhost");
+            getConfig().set("database.port",     5432);
+            getConfig().set("database.database", "serverdashboard");
+            getConfig().set("database.username", "postgres");
+            getConfig().set("database.password", "");
+            dirty = true;
+            getLogger().info("[Config] database 설정이 없어 기본값(sqlite)을 추가했습니다.");
+        }
+
+        // v1.9.0: chat 섹션
+        if (!getConfig().isSet("chat.enabled")) {
+            getConfig().set("chat.enabled", true);
+            getConfig().set("chat.format",             "{color}[{name}] §7{player}§f: {message}");
+            getConfig().set("chat.pm-send-format",    "§d[귓속말 → {to}] §f{message}");
+            getConfig().set("chat.pm-receive-format", "§d[귓속말 ← {from}] §f{message}");
+            getConfig().set("chat.channels.global.name",       "글로벌");
+            getConfig().set("chat.channels.global.alias",      "g");
+            getConfig().set("chat.channels.global.color",      "§f");
+            getConfig().set("chat.channels.global.distance",   0);
+            getConfig().set("chat.channels.global.permission", "");
+            getConfig().set("chat.channels.global.default",    true);
+            getConfig().set("chat.channels.local.name",       "로컬");
+            getConfig().set("chat.channels.local.alias",      "l");
+            getConfig().set("chat.channels.local.color",      "§7");
+            getConfig().set("chat.channels.local.distance",   200);
+            getConfig().set("chat.channels.local.permission", "");
+            getConfig().set("chat.channels.local.default",    false);
+            getConfig().set("chat.channels.staff.name",       "스태프");
+            getConfig().set("chat.channels.staff.alias",      "s");
+            getConfig().set("chat.channels.staff.color",      "§c");
+            getConfig().set("chat.channels.staff.distance",   0);
+            getConfig().set("chat.channels.staff.permission", "serverdashboard.admin");
+            getConfig().set("chat.channels.staff.default",    false);
+            dirty = true;
+            getLogger().info("[Config] chat 설정이 없어 기본값을 추가했습니다.");
+        }
+
+        if (dirty) saveConfig();
     }
 
     private void autoRenewIfNeeded() {
