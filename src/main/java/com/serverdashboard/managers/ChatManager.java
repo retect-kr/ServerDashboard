@@ -21,18 +21,35 @@ import java.util.stream.Collectors;
 
 public class ChatManager implements Listener {
 
-    /** Modules can register an interceptor to handle chat before channel routing. */
+    /** 채널 진입 전 메시지를 가로채는 인터셉터 (레거시 지원용). */
     @FunctionalInterface
     public interface ChatInterceptor {
-        /** @return true if the message was handled (skips normal channel routing). */
         boolean intercept(Player player, String message);
+    }
+
+    /**
+     * 특정 채널의 메시지 라우팅을 담당하는 커스텀 라우터.
+     * addTransientChannel()로 채널 등록 후 registerChannelRouter()로 라우터를 함께 등록하면
+     * 해당 채널의 메시지는 기본 broadcast 대신 라우터가 처리한다.
+     */
+    @FunctionalInterface
+    public interface ChatChannelRouter {
+        /**
+         * @param sender  메시지를 보낸 플레이어
+         * @param channel 해당 채널
+         * @param message 원본 메시지 텍스트
+         * @param formatted 포맷 적용된 Adventure Component
+         * @return true면 기본 broadcast를 건너뜀
+         */
+        boolean route(Player sender, ChatChannel channel, String message, Component formatted);
     }
 
     private static final int LOG_SIZE = 100;
     private static final LegacyComponentSerializer LEGACY = LegacyComponentSerializer.legacySection();
 
     private final DashboardPlugin plugin;
-    private final java.util.concurrent.CopyOnWriteArrayList<ChatInterceptor> interceptors = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final java.util.concurrent.CopyOnWriteArrayList<ChatInterceptor> interceptors   = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final Map<String, ChatChannelRouter>                             channelRouters = new ConcurrentHashMap<>();
     private final List<ChatChannel>                     channels     = new ArrayList<>();
     private final Map<UUID, String>                     playerCh     = new ConcurrentHashMap<>(); // uuid → channelId
     private final Map<UUID, UUID>                       pmTarget     = new ConcurrentHashMap<>(); // sender → last target
@@ -80,6 +97,9 @@ public class ChatManager implements Listener {
     public void addInterceptor(ChatInterceptor ci)    { interceptors.add(ci); }
     public void removeInterceptor(ChatInterceptor ci) { interceptors.remove(ci); }
 
+    public void registerChannelRouter(String channelId, ChatChannelRouter router)   { channelRouters.put(channelId, router); }
+    public void unregisterChannelRouter(String channelId)                           { channelRouters.remove(channelId); }
+
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onChat(AsyncChatEvent event) {
         if (!plugin.getConfig().getBoolean("chat.enabled", true)) return;
@@ -87,7 +107,7 @@ public class ChatManager implements Listener {
         Player p = event.getPlayer();
         String plain = PlainTextComponentSerializer.plainText().serialize(event.message());
 
-        // Let registered interceptors (e.g. Teams module) handle first
+        // 레거시 인터셉터 (ChatChannelRouter 등록 전 구버전 모듈 호환)
         for (ChatInterceptor ci : interceptors) {
             if (ci.intercept(p, plain)) {
                 event.setCancelled(true);
@@ -135,6 +155,16 @@ public class ChatManager implements Listener {
         final ChatChannel ch   = target;
         final String finalText = msgText;
 
+        // 채널 라우터가 있으면 위임 (기본 broadcast 건너뜀)
+        ChatChannelRouter router = channelRouters.get(ch.getId());
+        if (router != null) {
+            if (router.route(p, ch, finalText, msg)) {
+                log(ch.getId(), p.getName(), null, finalText);
+                return;
+            }
+        }
+
+        // 기본 broadcast
         if (ch.getDistance() > 0) {
             Bukkit.getScheduler().runTask(plugin, () -> {
                 double r2 = (double) ch.getDistance() * ch.getDistance();
