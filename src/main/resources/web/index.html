@@ -1146,7 +1146,9 @@ async function api(method, path, body) {
 /* ── INIT ──────────────────────────────── */
 function init() {
   updateSidebarUser();
-  loadStatus(); loadPlayers(); loadBans(); loadAnnouncements();
+  // 현재 URL 경로에 맞는 섹션으로 진입 (페이지 새로고침 지원)
+  nav(sectionFromPath(), false);
+  loadPlayers(); loadBans(); loadAnnouncements();
   loadModules();
   setConn(true);
   clearInterval(refreshTimer);
@@ -1158,8 +1160,32 @@ function init() {
 
 /* ── NAVIGATION ────────────────────────── */
 const SECTIONS = ['status','players','bans','announcements','console','plugins','whitelist','gamerules','settings','module-mgr','chat','audit'];
+
+// section → URL 경로 매핑
+const SECTION_PATH = {
+  'status':        '/status',
+  'players':       '/players',
+  'bans':          '/bans',
+  'announcements': '/announcements',
+  'console':       '/console',
+  'plugins':       '/plugins',
+  'whitelist':     '/whitelist',
+  'gamerules':     '/gamerules',
+  'settings':      '/settings',
+  'module-mgr':    '/modules',
+  'chat':          '/chat',
+  'audit':         '/audit',
+};
+// URL 경로 → section 역매핑
+const PATH_SECTION = Object.fromEntries(Object.entries(SECTION_PATH).map(([k, v]) => [v, k]));
+
+function sectionFromPath() {
+  const p = window.location.pathname;
+  return PATH_SECTION[p] || (p === '/' ? 'status' : null) || 'status';
+}
+
 function navTo(section) { nav(section); }
-function nav(section) {
+function nav(section, _pushHistory = true) {
   SECTIONS.forEach(s => {
     const ph = $('ph-' + s), sa = $('sa-' + s), ni = document.querySelector(`[data-nav="${s}"]`);
     if (ph) ph.style.display = 'none';
@@ -1171,6 +1197,12 @@ function nav(section) {
   if (sa) sa.style.display = section === 'console' ? 'flex' : 'block';
   if (ni) ni.classList.add('active');
   curNav = section;
+
+  // URL 업데이트
+  const targetPath = SECTION_PATH[section] || '/' + section;
+  if (_pushHistory) history.pushState({ section }, '', targetPath);
+  else              history.replaceState({ section }, '', targetPath);
+
   if (section === 'players')       loadPlayers();
   if (section === 'bans')          loadBans();
   if (section === 'announcements') loadAnnouncements();
@@ -1181,11 +1213,17 @@ function nav(section) {
   if (section === 'whitelist')     loadWhitelist();
   if (section === 'gamerules')     loadGamerules();
   if (section === 'settings')      renderLangButtons();
-  if (section === 'module-mgr')   loadModuleMgr();
-  if (section === 'chat')         chatLoad();
-  if (section === 'audit')        auditLoad();
-  if (section === 'settings')     iamLoad();
+  if (section === 'module-mgr')    loadModuleMgr();
+  if (section === 'chat')          chatLoad();
+  if (section === 'audit')         auditLoad();
+  if (section === 'settings')      iamLoad();
 }
+
+// 브라우저 뒤로/앞으로 버튼
+window.addEventListener('popstate', e => {
+  nav(e.state?.section || sectionFromPath(), false);
+});
+
 (function() {
   SECTIONS.forEach(s => { const ph=$('ph-'+s),sa=$('sa-'+s); if(ph)ph.style.display='none'; if(sa)sa.style.display='none'; });
   $('ph-status').style.display='flex'; $('sa-status').style.display='block';

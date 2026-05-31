@@ -176,6 +176,13 @@ public class WebServer {
         String resourcePath = "/web" + path;
         InputStream is = getClass().getResourceAsStream(resourcePath);
 
+        // SPA fallback: 확장자 없는 경로는 index.html 제공 (클라이언트 라우팅)
+        if (is == null && !path.contains(".")) {
+            resourcePath = "/web/index.html";
+            is = getClass().getResourceAsStream(resourcePath);
+            path = "/index.html";
+        }
+
         if (is == null) {
             byte[] msg = "404 Not Found".getBytes(StandardCharsets.UTF_8);
             ex.getResponseHeaders().add("Content-Type", "text/plain; charset=UTF-8");
