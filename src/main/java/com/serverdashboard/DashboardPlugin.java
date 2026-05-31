@@ -2,6 +2,7 @@ package com.serverdashboard;
 
 import com.serverdashboard.managers.AcmeManager;
 import com.serverdashboard.managers.AnnouncementManager;
+import com.serverdashboard.managers.ChatManager;
 import com.serverdashboard.managers.LogManager;
 import com.serverdashboard.managers.ModuleManager;
 import com.serverdashboard.web.WebServer;
@@ -29,6 +30,7 @@ public class DashboardPlugin extends JavaPlugin implements Listener {
     private AcmeManager acmeManager;
     private LogManager logManager;
     private ModuleManager moduleManager;
+    private ChatManager chatManager;
 
     @Override
     public void onEnable() {
@@ -69,6 +71,12 @@ public class DashboardPlugin extends JavaPlugin implements Listener {
         if (moduleManager.count() > 0)
             getLogger().info("[Modules] " + moduleManager.count() + " module(s) loaded.");
 
+        if (getConfig().getBoolean("chat.enabled", true)) {
+            chatManager = new ChatManager(this);
+            Bukkit.getPluginManager().registerEvents(chatManager, this);
+            getLogger().info("[Chat] 채팅 채널 시스템 활성화됨 (" + chatManager.getChannels().size() + "개 채널)");
+        }
+
         Bukkit.getPluginManager().registerEvents(this, this);
         announcementManager.startAll();
         getLogger().info("ServerDashboard plugin enabled.");
@@ -103,6 +111,18 @@ public class DashboardPlugin extends JavaPlugin implements Listener {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
+        if (command.getName().equalsIgnoreCase("ch") || command.getName().equalsIgnoreCase("channel")) {
+            if (chatManager != null) chatManager.handleCh(sender, args);
+            return true;
+        }
+        if (command.getName().equalsIgnoreCase("msg") || command.getName().equalsIgnoreCase("tell")) {
+            if (chatManager != null) chatManager.handleMsg(sender, args);
+            return true;
+        }
+        if (command.getName().equalsIgnoreCase("r") || command.getName().equalsIgnoreCase("reply")) {
+            if (chatManager != null) chatManager.handleReply(sender, args);
+            return true;
+        }
         if (!command.getName().equalsIgnoreCase("dashboard")) return false;
 
         if (!sender.hasPermission("serverdashboard.admin")) {
@@ -127,6 +147,7 @@ public class DashboardPlugin extends JavaPlugin implements Listener {
         switch (args[0].toLowerCase()) {
             case "reload" -> {
                 reloadConfig();
+                if (chatManager != null) chatManager.reload();
                 sender.sendMessage("§a[Dashboard] §fConfig reloaded.");
             }
             case "reload-ssl" -> {
@@ -214,4 +235,5 @@ public class DashboardPlugin extends JavaPlugin implements Listener {
     public AcmeManager getAcmeManager() { return acmeManager; }
     public LogManager getLogManager() { return logManager; }
     public ModuleManager getModuleManager() { return moduleManager; }
+    public ChatManager getChatManager() { return chatManager; }
 }

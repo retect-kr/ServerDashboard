@@ -32,3 +32,33 @@ web:
 
   # API authentication token (change this!)
   token: "changeme-please"
+
+# ── Chat channel system (VentureChat-style) ──────────────────────────────────
+chat:
+  enabled: true
+  # Message format variables: {color} {alias} {player} {message}
+  format: "{color}[{alias}] §7{player}§f: {message}"
+  pm-send-format:    "§d[귓속말 → {to}] §f{message}"
+  pm-receive-format: "§d[귓속말 ← {from}] §f{message}"
+  channels:
+    global:
+      name: "글로벌"
+      alias: "g"
+      color: "§f"
+      distance: 0
+      permission: ""
+      default: true
+    local:
+      name: "로컬"
+      alias: "l"
+      color: "§7"
+      distance: 200
+      permission: ""
+      default: false
+    staff:
+      name: "스태프"
+      alias: "s"
+      color: "§c"
+      distance: 0
+      permission: "serverdashboard.admin"
+      default: false

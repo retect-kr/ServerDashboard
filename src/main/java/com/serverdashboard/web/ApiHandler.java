@@ -134,9 +134,112 @@ public class ApiHandler implements HttpHandler {
             handleReloadModule(ex, path.split("/")[2]);
         } else if (path.startsWith("/module/")) {
             handleModuleRoute(ex, method, path.substring("/module/".length()));
+        } else if (path.equals("/version") && method.equals("GET")) {
+            JsonObject v = new JsonObject();
+            v.addProperty("version", plugin.getDescription().getVersion());
+            v.addProperty("name",    plugin.getDescription().getName());
+            send(ex, 200, v);
+        } else if (path.startsWith("/chat")) {
+            handleChatRoute(ex, method, path.substring("/chat".length()));
         } else {
             send(ex, 404, obj("error", "Not Found"));
         }
+    }
+
+    // ── Chat API ──────────────────────────────────────────────────────────────
+
+    private void handleChatRoute(HttpExchange ex, String method, String path) throws Exception {
+        var chat = plugin.getChatManager();
+        if (chat == null) { send(ex, 503, obj("error", "채팅 시스템이 비활성화되어 있습니다")); return; }
+
+        if (path.equals("/channels") && method.equals("GET")) {
+            JsonArray arr = new JsonArray();
+            chat.getChannels().forEach(ch -> arr.add(channelJson(ch)));
+            send(ex, 200, arr);
+
+        } else if (path.equals("/channels") && method.equals("POST")) {
+            JsonObject body = readBody(ex);
+            com.serverdashboard.models.ChatChannel ch = new com.serverdashboard.models.ChatChannel();
+            ch.setId(getStr(body, "id"));
+            ch.setName(getStr(body, "name", "채널"));
+            ch.setAlias(getStr(body, "alias", "?"));
+            ch.setColor(getStr(body, "color", "§f"));
+            ch.setDistance(body.has("distance") ? body.get("distance").getAsInt() : 0);
+            ch.setPermission(getStr(body, "permission"));
+            ch.setDefault(body.has("default") && body.get("default").getAsBoolean());
+            if (ch.getId() == null || ch.getId().isBlank()) { send(ex, 400, obj("error", "id 필드가 필요합니다")); return; }
+            if (chat.addChannel(ch)) send(ex, 201, channelJson(ch));
+            else send(ex, 409, obj("error", "'" + ch.getId() + "' 채널이 이미 존재합니다"));
+
+        } else if (path.matches("/channels/[^/]+") && method.equals("PUT")) {
+            String id = path.split("/")[2];
+            JsonObject body = readBody(ex);
+            com.serverdashboard.models.ChatChannel ch = new com.serverdashboard.models.ChatChannel();
+            ch.setId(id);
+            ch.setName(getStr(body, "name", id));
+            ch.setAlias(getStr(body, "alias", id.substring(0, 1)));
+            ch.setColor(getStr(body, "color", "§f"));
+            ch.setDistance(body.has("distance") ? body.get("distance").getAsInt() : 0);
+            ch.setPermission(getStr(body, "permission"));
+            ch.setDefault(body.has("default") && body.get("default").getAsBoolean());
+            if (chat.updateChannel(id, ch)) send(ex, 200, channelJson(ch));
+            else send(ex, 404, obj("error", "채널을 찾을 수 없습니다"));
+
+        } else if (path.matches("/channels/[^/]+") && method.equals("DELETE")) {
+            String id = path.split("/")[2];
+            if (chat.deleteChannel(id)) send(ex, 200, obj("message", "채널이 삭제되었습니다."));
+            else send(ex, 404, obj("error", "채널을 찾을 수 없습니다"));
+
+        } else if (path.matches("/channels/[^/]+/log") && method.equals("GET")) {
+            String id = path.split("/")[2];
+            JsonArray arr = new JsonArray();
+            chat.getChannelLog(id).forEach(m -> arr.add(msgJson(m)));
+            send(ex, 200, arr);
+
+        } else if (path.matches("/channels/[^/]+/say") && method.equals("POST")) {
+            String id = path.split("/")[2];
+            JsonObject body = readBody(ex);
+            String text = getStr(body, "message");
+            if (text == null || text.isBlank()) { send(ex, 400, obj("error", "message 필드가 필요합니다")); return; }
+            String sender = getStr(body, "sender", "[서버]");
+            runOnMain(() -> { chat.sayToChannel(id, sender, text); return null; });
+            send(ex, 200, obj("message", "전송되었습니다."));
+
+        } else if (path.equals("/pm") && method.equals("GET")) {
+            JsonArray arr = new JsonArray();
+            chat.getPmLog().forEach(m -> arr.add(msgJson(m)));
+            send(ex, 200, arr);
+
+        } else if (path.equals("/players") && method.equals("GET")) {
+            JsonObject obj = new JsonObject();
+            chat.getPlayerChannelMap().forEach(obj::addProperty);
+            send(ex, 200, obj);
+
+        } else {
+            send(ex, 404, obj("error", "Not Found"));
+        }
+    }
+
+    private JsonObject channelJson(com.serverdashboard.models.ChatChannel ch) {
+        JsonObject o = new JsonObject();
+        o.addProperty("id",         ch.getId());
+        o.addProperty("name",       ch.getName());
+        o.addProperty("alias",      ch.getAlias());
+        o.addProperty("color",      ch.getColor());
+        o.addProperty("distance",   ch.getDistance());
+        o.addProperty("permission", ch.getPermission() != null ? ch.getPermission() : "");
+        o.addProperty("default",    ch.isDefault());
+        return o;
+    }
+
+    private JsonObject msgJson(com.serverdashboard.models.ChatMessage m) {
+        JsonObject o = new JsonObject();
+        o.addProperty("timestamp", m.getTimestamp());
+        o.addProperty("channelId", m.getChannelId());
+        o.addProperty("sender",    m.getSender());
+        o.addProperty("recipient", m.getRecipient());
+        o.addProperty("content",   m.getContent());
+        return o;
     }
 
     private void handleGetPlayers(HttpExchange ex) throws Exception {

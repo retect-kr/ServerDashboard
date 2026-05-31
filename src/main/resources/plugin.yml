@@ -1,5 +1,5 @@
 name: ServerDashboard
-version: '1.8.2'
+version: '1.9.0'
 main: com.serverdashboard.DashboardPlugin
 api-version: '1.21'
 description: Web dashboard for managing kicks, bans, and announcements
@@ -9,6 +9,18 @@ commands:
     description: ServerDashboard management command
     usage: /dashboard <login|reload|reload-ssl|reload-modules|cert-issue|token>
     permission: serverdashboard.admin
+  ch:
+    description: 채팅 채널 변경
+    usage: /ch [채널]
+    aliases: [channel]
+  msg:
+    description: 귓속말
+    usage: /msg <플레이어> <메시지>
+    aliases: [tell, whisper, w]
+  r:
+    description: 귓속말 답장
+    usage: /r <메시지>
+    aliases: [reply]
 permissions:
   serverdashboard.admin:
     description: Access to ServerDashboard commands

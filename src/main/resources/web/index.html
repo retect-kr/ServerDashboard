@@ -414,11 +414,16 @@ code  { font-family: var(--mono); font-size:.9em; background: var(--surface-3); 
         <div class="nav-item" onclick="nav('module-mgr')" data-nav="module-mgr">
           <i class="ti ti-puzzle-2"></i> <span data-i18n="nav.modules">Modules</span>
         </div>
+        <div class="nav-item" onclick="nav('chat')" data-nav="chat">
+          <i class="ti ti-message-circle"></i> <span>채팅 채널</span>
+        </div>
       </div>
     </nav>
     <div style="padding:8px;border-top:1px solid var(--border);flex-shrink:0">
       <div class="nav-item" onclick="nav('settings')" data-nav="settings">
-        <i class="ti ti-settings"></i> <span data-i18n="nav.settings">Settings</span>
+        <i class="ti ti-settings"></i>
+        <span data-i18n="nav.settings">Settings</span>
+        <span id="update-dot" style="display:none;margin-left:auto;width:7px;height:7px;border-radius:50%;background:var(--yellow);flex-shrink:0"></span>
       </div>
     </div>
     <div class="sidebar-foot">
@@ -698,6 +703,17 @@ code  { font-family: var(--mono); font-size:.9em; background: var(--surface-3); 
     </div>
     <div class="scroll-area" id="sa-settings" style="display:none">
       <section class="section active" id="section-settings">
+
+        <!-- Update notice banner -->
+        <div id="update-banner" style="display:none;margin-bottom:14px;padding:12px 16px;border-radius:var(--r);background:var(--yellow-dim);border:1px solid rgba(245,158,11,.3);display:flex;align-items:center;gap:10px">
+          <i class="ti ti-alert-triangle" style="font-size:18px;color:var(--yellow);flex-shrink:0"></i>
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:13px" data-i18n="update.title">업데이트 알림</div>
+            <div id="update-msg" style="font-size:12px;color:var(--text-2);margin-top:2px"></div>
+          </div>
+          <a id="update-link" href="#" target="_blank" class="btn btn-warn btn-sm" data-i18n="update.download">다운로드</a>
+        </div>
+
         <div class="card">
           <div class="card-head">
             <span class="card-title"><i class="ti ti-language"></i> <span data-i18n="label.language">Language</span></span>
@@ -729,8 +745,99 @@ code  { font-family: var(--mono); font-size:.9em; background: var(--surface-3); 
       </section>
     </div>
 
+    <!-- ── CHAT ────────────────────────────────── -->
+    <div id="ph-chat" class="page-head" style="display:none">
+      <div>
+        <div class="page-title">채팅 채널</div>
+        <div class="page-sub">채널 관리 및 실시간 채팅 모니터링</div>
+      </div>
+      <div class="page-acts">
+        <button class="btn btn-ghost btn-sm" onclick="chatLoad()"><i class="ti ti-refresh"></i> 새로고침</button>
+        <button class="btn btn-primary btn-sm" onclick="chatShowCreate()"><i class="ti ti-plus"></i> 채널 추가</button>
+      </div>
+    </div>
+    <div class="scroll-area" id="sa-chat" style="display:none">
+      <section class="section active" id="section-chat">
+        <div style="display:grid;grid-template-columns:220px 1fr;gap:14px;height:100%">
+
+          <!-- Channel list -->
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="card" style="padding:12px">
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-3);margin-bottom:8px">채널 목록</div>
+              <div id="chat-channel-list" style="display:flex;flex-direction:column;gap:3px"></div>
+            </div>
+            <div class="card" style="padding:12px">
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text-3);margin-bottom:8px">접속 중인 플레이어</div>
+              <div id="chat-player-list" style="display:flex;flex-direction:column;gap:4px;font-size:12.5px"></div>
+            </div>
+          </div>
+
+          <!-- Message feed + send -->
+          <div class="card" style="display:flex;flex-direction:column;min-height:0">
+            <div class="card-head" style="flex-shrink:0">
+              <div class="card-title">
+                <i class="ti ti-message-circle"></i>
+                <span id="chat-feed-title">채널을 선택하세요</span>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-ghost btn-sm" id="chat-edit-btn" style="display:none" onclick="chatShowEdit()"><i class="ti ti-pencil"></i> 편집</button>
+                <button class="btn btn-danger btn-sm" id="chat-del-btn" style="display:none" onclick="chatDeleteChannel()"><i class="ti ti-trash"></i> 삭제</button>
+              </div>
+            </div>
+            <div id="chat-feed" style="flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:3px;font-family:var(--mono);font-size:12.5px">
+              <div style="color:var(--text-3);text-align:center;padding:20px 0">채널을 선택하면 메시지를 볼 수 있습니다</div>
+            </div>
+            <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0">
+              <input id="chat-send-input" class="form-ctrl" placeholder="대시보드에서 메시지 전송…"
+                style="flex:1" onkeydown="if(event.key==='Enter')chatSend()">
+              <input id="chat-send-name" class="form-ctrl" placeholder="발신자 이름" value="[서버]"
+                style="width:100px">
+              <button class="btn btn-primary btn-sm" onclick="chatSend()"><i class="ti ti-send"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PM log -->
+        <div class="card" style="margin-top:14px">
+          <div class="card-head">
+            <div class="card-title"><i class="ti ti-mail"></i> 귓속말 로그</div>
+            <button class="btn btn-ghost btn-sm" onclick="chatLoadPm()"><i class="ti ti-refresh"></i></button>
+          </div>
+          <div id="chat-pm-feed" class="card-body" style="font-family:var(--mono);font-size:12.5px;max-height:250px;overflow-y:auto">
+            <div style="color:var(--text-3)">귓속말 로그가 없습니다</div>
+          </div>
+        </div>
+      </section>
+    </div>
+
   </div><!-- /main -->
 </div><!-- /app -->
+
+<!-- CHAT CREATE/EDIT MODAL -->
+<div class="overlay" id="chatChModal" onclick="if(event.target===this)closeModal('chatChModal')">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title" id="chatChModalTitle">채널 추가</div></div>
+    <div class="modal-body">
+      <input type="hidden" id="chatChId-orig">
+      <div class="form-grid">
+        <div class="form-g"><label class="form-label">채널 ID (영문)</label><input class="form-ctrl" id="chatChId" placeholder="global"></div>
+        <div class="form-g"><label class="form-label">채널 이름</label><input class="form-ctrl" id="chatChName" placeholder="글로벌"></div>
+        <div class="form-g"><label class="form-label">별칭 (alias)</label><input class="form-ctrl" id="chatChAlias" placeholder="g" maxlength="5"></div>
+        <div class="form-g"><label class="form-label">색상 코드 (§f 등)</label><input class="form-ctrl" id="chatChColor" placeholder="§f" value="§f"></div>
+        <div class="form-g"><label class="form-label">반경 (0=전체)</label><input class="form-ctrl" type="number" id="chatChDist" min="0" value="0"></div>
+        <div class="form-g"><label class="form-label">권한 (비워두면 없음)</label><input class="form-ctrl" id="chatChPerm" placeholder="serverdashboard.admin"></div>
+      </div>
+      <div class="toggle-row" style="margin-top:10px">
+        <label class="toggle"><input type="checkbox" id="chatChDefault"><span class="tgl-track"></span><span class="tgl-thumb"></span></label>
+        <span style="font-size:13px">기본 채널로 설정</span>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal('chatChModal')">취소</button>
+      <button class="btn btn-primary" onclick="chatSaveChannel()">저장</button>
+    </div>
+  </div>
+</div>
 
 <div id="toast"></div>
 
@@ -936,7 +1043,7 @@ function init() {
 }
 
 /* ── NAVIGATION ────────────────────────── */
-const SECTIONS = ['status','players','bans','announcements','console','plugins','whitelist','gamerules','settings','module-mgr'];
+const SECTIONS = ['status','players','bans','announcements','console','plugins','whitelist','gamerules','settings','module-mgr','chat'];
 function navTo(section) { nav(section); }
 function nav(section) {
   SECTIONS.forEach(s => {
@@ -961,6 +1068,7 @@ function nav(section) {
   if (section === 'gamerules')     loadGamerules();
   if (section === 'settings')      renderLangButtons();
   if (section === 'module-mgr')   loadModuleMgr();
+  if (section === 'chat')         chatLoad();
 }
 (function() {
   SECTIONS.forEach(s => { const ph=$('ph-'+s),sa=$('sa-'+s); if(ph)ph.style.display='none'; if(sa)sa.style.display='none'; });
@@ -1564,6 +1672,8 @@ const LANG = {
     'tok.title':'서버 대시보드','tok.sub':'config.yml의 web.token 값을 입력하세요.',
     'motd.preview':'미리보기','motd.default':'서버 기본 MOTD 사용 중',
     'misc.loading':'불러오는 중...',
+    'update.title':'업데이트 알림',
+    'update.download':'다운로드',
   }
 };
 
@@ -1596,9 +1706,180 @@ function renderLangButtons() {
   en.style.justifyContent = ko.style.justifyContent = 'center';
 }
 
+/* ── UPDATE CHECK ──────────────────────── */
+async function checkUpdate() {
+  try {
+    const vr = await api('GET', '/version');
+    if (!vr.ok) return;
+    const cur = vr.data.version;
+    const gr  = await fetch('https://api.github.com/repos/retect-kr/ServerDashboard/releases/latest');
+    if (!gr.ok) return;
+    const gd  = await gr.json();
+    const latest = (gd.tag_name || '').replace(/^v/, '');
+    if (!latest || latest === cur) return;
+    const banner = $('update-banner');
+    const msg    = $('update-msg');
+    const link   = $('update-link');
+    if (!banner || !msg || !link) return;
+    msg.textContent = `${t('update.title')}: v${cur} → v${latest}`;
+    link.href = gd.html_url || '#';
+    banner.style.display = 'flex';
+    $('update-dot').style.display = 'block';
+  } catch (_) {}
+}
+
 /* ── BOOT ──────────────────────────────── */
 checkToken();
 applyLang();
+checkUpdate();
+
+/* ── CHAT ──────────────────────────────── */
+let chatCurrentId = null;
+let chatChannels  = [];
+
+async function chatLoad() {
+  const [rCh, rPl] = await Promise.all([api('GET','/chat/channels'), api('GET','/chat/players')]);
+  if (!rCh.ok) return;
+  chatChannels = rCh.data;
+  renderChatChannelList();
+  if (rPl.ok) renderChatPlayers(rPl.data);
+  if (chatCurrentId) chatLoadFeed(chatCurrentId);
+}
+
+function renderChatChannelList() {
+  const el = $('chat-channel-list');
+  if (!chatChannels.length) { el.innerHTML = '<div style="color:var(--text-3);font-size:12px">채널 없음</div>'; return; }
+  el.innerHTML = chatChannels.map(ch => {
+    const active = ch.id === chatCurrentId;
+    const dist   = ch.distance > 0 ? `<span style="font-size:10px;color:var(--text-3)">(${ch.distance}블록)</span>` : '';
+    return `<div onclick="chatSelectChannel('${esc(ch.id)}')" style="display:flex;align-items:center;gap:7px;padding:6px 9px;border-radius:6px;cursor:pointer;background:${active?'var(--accent-dim)':'transparent'};border:1px solid ${active?'rgba(99,102,241,.3)':'transparent'};transition:all .12s">
+      <span style="width:8px;height:8px;border-radius:50%;background:${ch.color.replace('§','#').replace(/[a-z]/,'9')};flex-shrink:0;filter:brightness(2)"></span>
+      <span style="font-size:12.5px;font-weight:500;flex:1;color:${active?'var(--accent-2)':'var(--text)'}">${esc(ch.name)}</span>
+      <span style="font-size:10.5px;color:var(--text-3)">${esc(ch.alias)}</span>
+      ${dist}
+    </div>`;
+  }).join('');
+}
+
+function renderChatPlayers(map) {
+  const el = $('chat-player-list');
+  const entries = Object.entries(map);
+  if (!entries.length) { el.innerHTML = '<div style="color:var(--text-3)">접속 중인 플레이어 없음</div>'; return; }
+  el.innerHTML = entries.map(([name, cid]) => {
+    const ch = chatChannels.find(c => c.id === cid);
+    return `<div style="display:flex;align-items:center;justify-content:space-between">
+      <span>${esc(name)}</span>
+      <span style="font-size:11px;color:var(--text-3)">[${ch ? esc(ch.alias) : cid}]</span>
+    </div>`;
+  }).join('');
+}
+
+async function chatSelectChannel(id) {
+  chatCurrentId = id;
+  renderChatChannelList();
+  const ch = chatChannels.find(c => c.id === id);
+  $('chat-feed-title').textContent = ch ? ch.name : id;
+  $('chat-edit-btn').style.display = '';
+  $('chat-del-btn').style.display  = '';
+  await chatLoadFeed(id);
+}
+
+async function chatLoadFeed(id) {
+  const r = await api('GET', '/chat/channels/' + id + '/log');
+  if (!r.ok) return;
+  const feed = $('chat-feed');
+  const msgs = r.data;
+  if (!msgs.length) { feed.innerHTML = '<div style="color:var(--text-3);text-align:center;padding:20px 0">메시지 없음</div>'; return; }
+  feed.innerHTML = msgs.map(m => {
+    const t = new Date(m.timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    return `<div style="display:flex;gap:8px;line-height:1.6">
+      <span style="color:var(--text-3);flex-shrink:0">${t}</span>
+      <span style="color:var(--accent-2);flex-shrink:0">${esc(m.sender)}</span>
+      <span style="color:var(--text)">${esc(m.content)}</span>
+    </div>`;
+  }).join('');
+  feed.scrollTop = feed.scrollHeight;
+}
+
+async function chatLoadPm() {
+  const r = await api('GET', '/chat/pm');
+  if (!r.ok) return;
+  const el = $('chat-pm-feed');
+  if (!r.data.length) { el.innerHTML = '<div style="color:var(--text-3)">귓속말 로그가 없습니다</div>'; return; }
+  el.innerHTML = r.data.map(m => {
+    const t = new Date(m.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    return `<div style="display:flex;gap:8px;line-height:1.6">
+      <span style="color:var(--text-3);flex-shrink:0">${t}</span>
+      <span style="color:#d946ef">${esc(m.sender)} → ${esc(m.recipient)}</span>
+      <span style="color:var(--text)">${esc(m.content)}</span>
+    </div>`;
+  }).join('');
+}
+
+async function chatSend() {
+  if (!chatCurrentId) { toast('채널을 먼저 선택하세요', 'error'); return; }
+  const text   = $('chat-send-input').value.trim();
+  const sender = $('chat-send-name').value.trim() || '[서버]';
+  if (!text) return;
+  const r = await api('POST', '/chat/channels/' + chatCurrentId + '/say', { message: text, sender });
+  if (r.ok) { $('chat-send-input').value = ''; chatLoadFeed(chatCurrentId); }
+  else toast(r.data?.error || '전송 실패', 'error');
+}
+
+function chatShowCreate() {
+  $('chatChModalTitle').textContent = '채널 추가';
+  $('chatChId-orig').value = '';
+  ['chatChId','chatChName','chatChAlias','chatChPerm'].forEach(id => $(id).value = '');
+  $('chatChColor').value = '§f';
+  $('chatChDist').value  = '0';
+  $('chatChDefault').checked = false;
+  $('chatChId').disabled = false;
+  openModal('chatChModal');
+}
+
+function chatShowEdit() {
+  const ch = chatChannels.find(c => c.id === chatCurrentId);
+  if (!ch) return;
+  $('chatChModalTitle').textContent = '채널 편집';
+  $('chatChId-orig').value     = ch.id;
+  $('chatChId').value          = ch.id;
+  $('chatChId').disabled       = true;
+  $('chatChName').value        = ch.name;
+  $('chatChAlias').value       = ch.alias;
+  $('chatChColor').value       = ch.color;
+  $('chatChDist').value        = ch.distance;
+  $('chatChPerm').value        = ch.permission || '';
+  $('chatChDefault').checked   = ch.default;
+  openModal('chatChModal');
+}
+
+async function chatSaveChannel() {
+  const orig = $('chatChId-orig').value;
+  const body = {
+    id:         $('chatChId').value.trim(),
+    name:       $('chatChName').value.trim(),
+    alias:      $('chatChAlias').value.trim(),
+    color:      $('chatChColor').value.trim(),
+    distance:   parseInt($('chatChDist').value) || 0,
+    permission: $('chatChPerm').value.trim(),
+    default:    $('chatChDefault').checked,
+  };
+  if (!body.id || !body.name || !body.alias) { toast('ID, 이름, 별칭은 필수입니다', 'error'); return; }
+  const r = orig
+    ? await api('PUT',  '/chat/channels/' + orig, body)
+    : await api('POST', '/chat/channels', body);
+  if (r.ok) { closeModal('chatChModal'); toast('저장되었습니다', 'success'); chatLoad(); }
+  else toast(r.data?.error || '저장 실패', 'error');
+}
+
+async function chatDeleteChannel() {
+  if (!chatCurrentId) return;
+  const ch = chatChannels.find(c => c.id === chatCurrentId);
+  if (!confirm(`'${ch?.name || chatCurrentId}' 채널을 삭제하시겠습니까?`)) return;
+  const r = await api('DELETE', '/chat/channels/' + chatCurrentId);
+  if (r.ok) { chatCurrentId = null; toast('삭제되었습니다', 'success'); chatLoad(); }
+  else toast(r.data?.error || '삭제 실패', 'error');
+}
 </script>
 </body>
 </html>
