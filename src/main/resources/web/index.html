@@ -467,10 +467,19 @@ code  { font-family: var(--mono); font-size:.9em; background: var(--surface-3); 
       </div>
     </div>
     <div class="sidebar-foot">
-      <div class="conn">
-        <div class="conn-dot" id="connDot"></div>
-        <span id="connTxt">Connecting...</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div class="conn">
+          <div class="conn-dot" id="connDot"></div>
+          <span id="connTxt">Connecting...</span>
+        </div>
+        <button onclick="doLogout()" title="로그아웃"
+          style="background:none;border:none;cursor:pointer;padding:4px 6px;border-radius:5px;color:var(--text-3);transition:all .12s"
+          onmouseover="this.style.background='var(--surface-2)';this.style.color='var(--red)'"
+          onmouseout="this.style.background='none';this.style.color='var(--text-3)'">
+          <i class="ti ti-logout" style="font-size:16px"></i>
+        </button>
       </div>
+      <div id="sidebar-user" style="font-size:11px;color:var(--text-3);margin-top:5px;font-family:var(--mono)"></div>
     </div>
   </aside>
 
@@ -1136,6 +1145,7 @@ async function api(method, path, body) {
 
 /* ── INIT ──────────────────────────────── */
 function init() {
+  updateSidebarUser();
   loadStatus(); loadPlayers(); loadBans(); loadAnnouncements();
   loadModules();
   setConn(true);
@@ -1842,11 +1852,28 @@ async function loginWithPw() {
     localStorage.setItem('sd_user',  data.userId);
     hide('tokScreen');
     init();
+    updateSidebarUser();
   } else {
     errEl.textContent = data.error || '로그인 실패';
     errEl.style.display = '';
     $('loginPw').value = '';
   }
+}
+
+/* ── LOGOUT ────────────────────────────── */
+async function doLogout() {
+  try { await api('POST', '/auth/logout'); } catch (_) {}
+  token = '';
+  localStorage.removeItem('sd_token');
+  localStorage.removeItem('sd_user');
+  location.reload();
+}
+
+function updateSidebarUser() {
+  const el = $('sidebar-user');
+  if (!el) return;
+  const user = localStorage.getItem('sd_user');
+  el.textContent = user ? user : (token ? 'token' : '');
 }
 
 /* ── IAM ───────────────────────────────── */
