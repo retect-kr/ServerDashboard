@@ -24,6 +24,7 @@ dependencies {
     implementation("org.slf4j:slf4j-nop:2.0.16")
     implementation("org.xerial:sqlite-jdbc:3.47.1.0")
     implementation("com.mysql:mysql-connector-j:9.1.0")
+    implementation("org.postgresql:postgresql:42.7.4")
 }
 
 tasks {

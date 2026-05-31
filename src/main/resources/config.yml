@@ -35,12 +35,12 @@ web:
 
 # ── Database ─────────────────────────────────────────────────────────────────
 database:
-  type: sqlite   # sqlite | mysql
-  # MySQL only (ignored when type is sqlite):
+  type: postgres   # sqlite | mysql | postgres
+  # MySQL / PostgreSQL (ignored when type is sqlite):
   host: localhost
-  port: 3306
+  port: 5432       # MySQL: 3306 / PostgreSQL: 5432
   database: serverdashboard
-  username: root
+  username: postgres
   password: ""
 
 # ── Chat channel system (VentureChat-style) ──────────────────────────────────
