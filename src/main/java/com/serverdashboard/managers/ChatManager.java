@@ -123,9 +123,10 @@ public class ChatManager implements Listener {
 
         event.setCancelled(true);
 
-        String fmt = plugin.getConfig().getString("chat.format", "{color}[{alias}] §7{player}§f: {message}");
+        String fmt = plugin.getConfig().getString("chat.format", "{color}[{name}] §7{player}§f: {message}");
         String formatted = fmt
                 .replace("{color}", target.getColor())
+                .replace("{name}",  target.getName())
                 .replace("{alias}", target.getAlias())
                 .replace("{player}", p.getName())
                 .replace("{message}", msgText);
@@ -272,9 +273,9 @@ public class ChatManager implements Listener {
         ChatChannel ch;
         synchronized (channels) { ch = getChannel(channelId); }
         if (ch == null) return;
-        String fmt = plugin.getConfig().getString("chat.format", "{color}[{alias}] §7{player}§f: {message}");
-        String formatted = fmt.replace("{color}", ch.getColor()).replace("{alias}", ch.getAlias())
-                .replace("{player}", senderName).replace("{message}", text);
+        String fmt = plugin.getConfig().getString("chat.format", "{color}[{name}] §7{player}§f: {message}");
+        String formatted = fmt.replace("{color}", ch.getColor()).replace("{name}", ch.getName())
+                .replace("{alias}", ch.getAlias()).replace("{player}", senderName).replace("{message}", text);
         Component msg = LEGACY.deserialize(formatted);
         Bukkit.getOnlinePlayers().stream()
                 .filter(p -> ch.getPermission() == null || p.hasPermission(ch.getPermission()))

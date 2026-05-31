@@ -37,7 +37,7 @@ web:
 chat:
   enabled: true
   # Message format variables: {color} {alias} {player} {message}
-  format: "{color}[{alias}] §7{player}§f: {message}"
+  format: "{color}[{name}] §7{player}§f: {message}"
   pm-send-format:    "§d[귓속말 → {to}] §f{message}"
   pm-receive-format: "§d[귓속말 ← {from}] §f{message}"
   channels:
