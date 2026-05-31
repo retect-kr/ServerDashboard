@@ -2,7 +2,10 @@ package com.serverdashboard;
 
 import com.serverdashboard.managers.AcmeManager;
 import com.serverdashboard.managers.AnnouncementManager;
+import com.serverdashboard.managers.AuditManager;
 import com.serverdashboard.managers.ChatManager;
+import com.serverdashboard.managers.DatabaseManager;
+import com.serverdashboard.managers.IamManager;
 import com.serverdashboard.managers.LogManager;
 import com.serverdashboard.managers.ModuleManager;
 import com.serverdashboard.web.WebServer;
@@ -31,6 +34,9 @@ public class DashboardPlugin extends JavaPlugin implements Listener {
     private LogManager logManager;
     private ModuleManager moduleManager;
     private ChatManager chatManager;
+    private DatabaseManager databaseManager;
+    private IamManager iamManager;
+    private AuditManager auditManager;
 
     @Override
     public void onEnable() {
@@ -38,6 +44,17 @@ public class DashboardPlugin extends JavaPlugin implements Listener {
         saveDefaultConfig();
 
         logManager = new LogManager();
+
+        databaseManager = new DatabaseManager(this);
+        try {
+            databaseManager.init();
+        } catch (Exception e) {
+            getLogger().severe("[DB] 초기화 실패: " + e.getMessage());
+        }
+        iamManager   = new IamManager(this, databaseManager);
+        auditManager = new AuditManager(this, databaseManager);
+        getLogger().info("[IAM] 사용자 " + iamManager.userCount() + "명 로드됨.");
+
         announcementManager = new AnnouncementManager(this);
         announcementManager.load();
 
@@ -87,6 +104,7 @@ public class DashboardPlugin extends JavaPlugin implements Listener {
         if (moduleManager != null) moduleManager.unloadAll();
         if (logManager != null) logManager.stop();
         if (webServer != null) webServer.stop();
+        if (databaseManager != null) databaseManager.close();
         if (announcementManager != null) {
             announcementManager.stopAll();
             announcementManager.saveAll();
@@ -236,4 +254,7 @@ public class DashboardPlugin extends JavaPlugin implements Listener {
     public LogManager getLogManager() { return logManager; }
     public ModuleManager getModuleManager() { return moduleManager; }
     public ChatManager getChatManager() { return chatManager; }
+    public IamManager getIamManager() { return iamManager; }
+    public AuditManager getAuditManager() { return auditManager; }
+    public DatabaseManager getDatabaseManager() { return databaseManager; }
 }

@@ -21,8 +21,9 @@ dependencies {
     compileOnly("org.apache.logging.log4j:log4j-core:2.22.1")
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("org.shredzone.acme4j:acme4j-client:3.4.0")
-    // slf4j: acme4j 의존성, 로그 출력 없음 (Paper 로거 사용)
     implementation("org.slf4j:slf4j-nop:2.0.16")
+    implementation("org.xerial:sqlite-jdbc:3.47.1.0")
+    implementation("com.mysql:mysql-connector-j:9.1.0")
 }
 
 tasks {

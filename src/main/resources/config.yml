@@ -33,6 +33,16 @@ web:
   # API authentication token (change this!)
   token: "changeme-please"
 
+# ── Database ─────────────────────────────────────────────────────────────────
+database:
+  type: sqlite   # sqlite | mysql
+  # MySQL only (ignored when type is sqlite):
+  host: localhost
+  port: 3306
+  database: serverdashboard
+  username: root
+  password: ""
+
 # ── Chat channel system (VentureChat-style) ──────────────────────────────────
 chat:
   enabled: true

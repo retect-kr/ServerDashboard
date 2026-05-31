@@ -283,12 +283,29 @@ public class ChatManager implements Listener {
         log(channelId, senderName, null, text);
     }
 
+    public String getPlayerChannel(java.util.UUID uuid) {
+        String cid = playerCh.get(uuid);
+        if (cid != null) return cid;
+        ChatChannel def = defaultChannel();
+        return def != null ? def.getId() : null;
+    }
+
     public boolean addChannel(ChatChannel ch) {
         synchronized (channels) {
             if (channels.stream().anyMatch(c -> c.getId().equals(ch.getId()))) return false;
             channels.add(ch);
             chLogs.computeIfAbsent(ch.getId(), k -> new ArrayDeque<>());
             saveChannels();
+            return true;
+        }
+    }
+
+    /** 채널을 메모리에만 등록 (config 저장 안 함 — 모듈이 동적으로 등록할 때 사용) */
+    public boolean addTransientChannel(ChatChannel ch) {
+        synchronized (channels) {
+            if (channels.stream().anyMatch(c -> c.getId().equals(ch.getId()))) return false;
+            channels.add(ch);
+            chLogs.computeIfAbsent(ch.getId(), k -> new ArrayDeque<>());
             return true;
         }
     }

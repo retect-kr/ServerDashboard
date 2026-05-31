@@ -4,6 +4,7 @@ import com.google.gson.*;
 import com.serverdashboard.DashboardPlugin;
 import com.serverdashboard.api.DashboardModule;
 import com.serverdashboard.managers.AnnouncementManager;
+import com.serverdashboard.managers.IamManager;
 import com.serverdashboard.models.Announcement;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -32,8 +33,10 @@ public class ApiHandler implements HttpHandler {
 
     private final DashboardPlugin plugin;
     private final String token;
-    // [failureCount, windowStartMs]
     private final Map<String, long[]> authFailures = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final ThreadLocal<String> REQ_ACTOR = new ThreadLocal<>();
+    private static final ThreadLocal<String> REQ_IP    = new ThreadLocal<>();
 
     public ApiHandler(DashboardPlugin plugin, String token) {
         this.plugin = plugin;
@@ -49,32 +52,55 @@ public class ApiHandler implements HttpHandler {
             return;
         }
 
-        String ip = ex.getRemoteAddress().getAddress().getHostAddress();
-        if (isRateLimited(ip)) {
-            send(ex, 429, obj("error", "Too Many Requests"));
+        String ip   = ex.getRemoteAddress().getAddress().getHostAddress();
+        String path = ex.getRequestURI().getPath().replaceFirst("^/api", "");
+
+        if (isRateLimited(ip)) { send(ex, 429, obj("error", "Too Many Requests")); return; }
+
+        // /auth/login doesn't require authentication
+        if (path.equals("/auth/login") && "POST".equals(ex.getRequestMethod())) {
+            try { handleAuthLogin(ex, ip); } catch (Exception e) { send(ex, 500, obj("error", e.getMessage())); }
             return;
         }
 
         String authHeader = ex.getRequestHeaders().getFirst("Authorization");
-        if (authHeader == null || !authHeader.equals("Bearer " + token)) {
+        String bearerToken = (authHeader != null && authHeader.startsWith("Bearer "))
+                ? authHeader.substring(7) : null;
+
+        String actor = null;
+        if (bearerToken != null) {
+            if (bearerToken.equals(token)) {
+                actor = "token";
+            } else {
+                IamManager iam = plugin.getIamManager();
+                IamManager.Session sess = iam != null ? iam.validate(bearerToken) : null;
+                if (sess != null) actor = sess.userId();
+            }
+        }
+
+        if (actor == null) {
             recordAuthFailure(ip);
             send(ex, 401, obj("error", "Unauthorized"));
             return;
         }
         authFailures.remove(ip);
 
-        String path = ex.getRequestURI().getPath().replaceFirst("^/api", "");
-        String method = ex.getRequestMethod();
-
+        final String finalActor = actor;
+        final String method     = ex.getRequestMethod();
+        REQ_ACTOR.set(finalActor);
+        REQ_IP.set(ip);
         try {
-            route(ex, method, path);
+            route(ex, method, path, finalActor, ip, bearerToken);
         } catch (Exception e) {
             plugin.getLogger().warning("API error: " + e.getMessage());
             send(ex, 500, obj("error", e.getMessage()));
+        } finally {
+            REQ_ACTOR.remove();
+            REQ_IP.remove();
         }
     }
 
-    private void route(HttpExchange ex, String method, String path) throws Exception {
+    private void route(HttpExchange ex, String method, String path, String actor, String ip, String sessionToken) throws Exception {
         if (path.equals("/players") && method.equals("GET")) {
             handleGetPlayers(ex);
         } else if (path.equals("/kick") && method.equals("POST")) {
@@ -139,11 +165,159 @@ public class ApiHandler implements HttpHandler {
             v.addProperty("version", plugin.getDescription().getVersion());
             v.addProperty("name",    plugin.getDescription().getName());
             send(ex, 200, v);
+        } else if (path.startsWith("/auth")) {
+            handleAuthRoute(ex, method, path.substring("/auth".length()), actor, ip, sessionToken);
+        } else if (path.startsWith("/iam")) {
+            handleIamRoute(ex, method, path.substring("/iam".length()), actor, ip);
+        } else if (path.startsWith("/audit")) {
+            handleAuditRoute(ex, method, path.substring("/audit".length()), actor);
         } else if (path.startsWith("/chat")) {
             handleChatRoute(ex, method, path.substring("/chat".length()));
         } else {
             send(ex, 404, obj("error", "Not Found"));
         }
+    }
+
+    // ── Auth API ──────────────────────────────────────────────────────────────
+
+    private void handleAuthLogin(HttpExchange ex, String ip) throws Exception {
+        JsonObject body = readBody(ex);
+        String id   = getStr(body, "id");
+        String pw   = getStr(body, "password");
+        if (id == null || pw == null) { send(ex, 400, obj("error", "id와 password가 필요합니다")); return; }
+
+        IamManager iam = plugin.getIamManager();
+        String tok = iam != null ? iam.login(id, pw) : null;
+        if (tok == null) {
+            recordAuthFailure(ip);
+            audit("anonymous", "LOGIN_FAILED", id, null, ip);
+            send(ex, 401, obj("error", "아이디 또는 비밀번호가 올바르지 않습니다"));
+            return;
+        }
+        audit(id, "LOGIN", null, null, ip);
+        IamManager.Session sess = iam.validate(tok);
+        JsonObject resp = new JsonObject();
+        resp.addProperty("token", tok);
+        resp.addProperty("userId", id);
+        resp.addProperty("role", sess != null ? sess.role() : "admin");
+        resp.addProperty("expiresAt", sess != null ? sess.expiresAt() : 0L);
+        send(ex, 200, resp);
+    }
+
+    private void handleAuthRoute(HttpExchange ex, String method, String sub,
+                                  String actor, String ip, String sessionToken) throws Exception {
+        if (sub.equals("/logout") && "POST".equals(method)) {
+            IamManager iam = plugin.getIamManager();
+            if (iam != null && sessionToken != null) iam.logout(sessionToken);
+            audit(actor, "LOGOUT", null, null, ip);
+            send(ex, 200, obj("message", "로그아웃되었습니다."));
+        } else if (sub.equals("/me") && "GET".equals(method)) {
+            JsonObject o = new JsonObject();
+            o.addProperty("actor", actor);
+            o.addProperty("isMaster", "token".equals(actor));
+            IamManager iam = plugin.getIamManager();
+            IamManager.Session s = iam != null ? iam.validate(sessionToken) : null;
+            if (s != null) { o.addProperty("role", s.role()); o.addProperty("expiresAt", s.expiresAt()); }
+            else { o.addProperty("role", "admin"); }
+            send(ex, 200, o);
+        } else {
+            send(ex, 404, obj("error", "Not Found"));
+        }
+    }
+
+    // ── IAM API ───────────────────────────────────────────────────────────────
+
+    private void handleIamRoute(HttpExchange ex, String method, String sub, String actor, String ip) throws Exception {
+        IamManager iam = plugin.getIamManager();
+        if (iam == null) { send(ex, 503, obj("error", "IAM 시스템 비활성화")); return; }
+
+        if (sub.equals("/users") && "GET".equals(method)) {
+            JsonArray arr = new JsonArray();
+            iam.listUsers().forEach(u -> {
+                JsonObject o = new JsonObject();
+                u.forEach((k, v) -> { if (v instanceof Long l) o.addProperty(k, l); else o.addProperty(k, v.toString()); });
+                arr.add(o);
+            });
+            send(ex, 200, arr);
+
+        } else if (sub.equals("/users") && "POST".equals(method)) {
+            JsonObject body = readBody(ex);
+            String id   = getStr(body, "id");
+            String pw   = getStr(body, "password");
+            String role = getStr(body, "role", "admin");
+            if (id == null || pw == null) { send(ex, 400, obj("error", "id와 password가 필요합니다")); return; }
+            if (iam.createUser(id, pw, role)) {
+                audit(actor, "USER_CREATE", id, "role=" + role, ip);
+                send(ex, 201, obj("message", "사용자 '" + id + "'가 생성되었습니다."));
+            } else {
+                send(ex, 409, obj("error", "이미 존재하는 아이디입니다."));
+            }
+
+        } else if (sub.matches("/users/[^/]+") && "DELETE".equals(method)) {
+            String id = sub.split("/")[2];
+            if (id.equals(actor)) { send(ex, 400, obj("error", "자기 자신은 삭제할 수 없습니다.")); return; }
+            if (iam.deleteUser(id)) {
+                audit(actor, "USER_DELETE", id, null, ip);
+                send(ex, 200, obj("message", "삭제되었습니다."));
+            } else send(ex, 404, obj("error", "사용자를 찾을 수 없습니다."));
+
+        } else if (sub.matches("/users/[^/]+/password") && "PUT".equals(method)) {
+            String id   = sub.split("/")[2];
+            String pw   = getStr(readBody(ex), "password");
+            if (pw == null || pw.length() < 4) { send(ex, 400, obj("error", "비밀번호는 4자 이상이어야 합니다.")); return; }
+            if (iam.changePassword(id, pw)) {
+                audit(actor, "USER_PW_CHANGE", id, null, ip);
+                send(ex, 200, obj("message", "비밀번호가 변경되었습니다."));
+            } else send(ex, 404, obj("error", "사용자를 찾을 수 없습니다."));
+
+        } else {
+            send(ex, 404, obj("error", "Not Found"));
+        }
+    }
+
+    // ── Audit API ─────────────────────────────────────────────────────────────
+
+    private void handleAuditRoute(HttpExchange ex, String method, String sub, String actor) throws IOException {
+        if (!sub.equals("/logs") || !"GET".equals(method)) { send(ex, 404, obj("error", "Not Found")); return; }
+        var audit = plugin.getAuditManager();
+        if (audit == null) { send(ex, 503, obj("error", "감사 로그 비활성화")); return; }
+
+        String query  = ex.getRequestURI().getQuery();
+        int limit  = 50, offset = 0;
+        String filterActor = null;
+        if (query != null) {
+            for (String p : query.split("&")) {
+                if (p.startsWith("limit="))  try { limit  = Integer.parseInt(p.substring(6)); } catch (Exception ignored) {}
+                if (p.startsWith("offset=")) try { offset = Integer.parseInt(p.substring(7)); } catch (Exception ignored) {}
+                if (p.startsWith("actor="))  filterActor = p.substring(6);
+            }
+        }
+
+        JsonArray arr = new JsonArray();
+        audit.getLogs(Math.min(limit, 200), offset, filterActor).forEach(row -> {
+            JsonObject o = new JsonObject();
+            row.forEach((k, v) -> {
+                if (v instanceof Long l) o.addProperty(k, l);
+                else if (v != null) o.addProperty(k, v.toString());
+                else o.add(k, JsonNull.INSTANCE);
+            });
+            arr.add(o);
+        });
+        send(ex, 200, arr);
+    }
+
+    private void audit(String action, String target, String detail) {
+        var am = plugin.getAuditManager();
+        if (am != null) am.log(
+            REQ_ACTOR.get() != null ? REQ_ACTOR.get() : "?",
+            action, target, detail,
+            REQ_IP.get()
+        );
+    }
+
+    private void audit(String actor, String action, String target, String detail, String ip) {
+        var am = plugin.getAuditManager();
+        if (am != null) am.log(actor, action, target, detail, ip);
     }
 
     // ── Chat API ──────────────────────────────────────────────────────────────
@@ -271,7 +445,7 @@ public class ApiHandler implements HttpHandler {
             return true;
         });
 
-        if (result) send(ex, 200, obj("message", name + " kicked."));
+        if (result) { audit("KICK", name, "reason=" + reason); send(ex, 200, obj("message", name + " kicked.")); }
         else send(ex, 404, obj("error", "Player not found."));
     }
 
@@ -298,6 +472,7 @@ public class ApiHandler implements HttpHandler {
             return true;
         });
 
+        audit("BAN", name, "reason=" + reason + (expiryStr != null ? ",expiry=" + expiryStr : ""));
         send(ex, 200, obj("message", name + " banned."));
     }
 
@@ -310,6 +485,7 @@ public class ApiHandler implements HttpHandler {
             return null;
         });
 
+        audit("UNBAN", name, null);
         send(ex, 200, obj("message", name + " unbanned."));
     }
 
